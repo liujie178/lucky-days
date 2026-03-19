@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { X, Plus, Check } from 'lucide-react';
-import { DailyLog } from '../store';
-import { format, parseISO } from 'date-fns';
+import { X, Plus, Check, Droplet, RotateCcw } from 'lucide-react';
+import { DailyLog, PeriodRecord } from '../store';
+import { format, parseISO, isSameDay, isAfter, isBefore, startOfDay } from 'date-fns';
 
 const SYMPTOMS_LIST = ['腹痛', '头痛', '疲劳', '水肿', '长痘', '胸胀', '腰酸', '失眠', '食欲大增', '畏寒'];
 const EMOTIONS_LIST = ['开心', '平静', '焦虑', '易怒', '低落', '敏感', '疲惫', '充满活力'];
@@ -11,14 +11,28 @@ interface Props {
   onClose: () => void;
   date: string;
   initialData?: DailyLog;
+  records: PeriodRecord[];
+  addRecord: (record: PeriodRecord) => void;
+  updateRecord: (id: string, updates: Partial<PeriodRecord>) => void;
+  deleteRecord: (id: string) => void;
   onSave: (log: DailyLog) => void;
 }
 
-export default function DailyLogModal({ isOpen, onClose, date, initialData, onSave }: Props) {
+type PeriodAction = 
+  | { type: 'start' }
+  | { type: 'end', recordId: string }
+  | { type: 'undo_start', recordId: string }
+  | { type: 'undo_end', recordId: string }
+  | null;
+
+export default function DailyLogModal({ isOpen, onClose, date, initialData, records, addRecord, updateRecord, deleteRecord, onSave }: Props) {
   const [symptoms, setSymptoms] = useState<string[]>([]);
   const [emotions, setEmotions] = useState<string[]>([]);
   const [customTags, setCustomTags] = useState<string[]>([]);
   const [newTag, setNewTag] = useState('');
+  
+  // Staged action for period status
+  const [stagedAction, setStagedAction] = useState<PeriodAction>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -32,10 +46,33 @@ export default function DailyLogModal({ isOpen, onClose, date, initialData, onSa
         setCustomTags([]);
       }
       setNewTag('');
+      setStagedAction(null);
     }
   }, [isOpen, initialData]);
 
   if (!isOpen) return null;
+
+  const currentDay = startOfDay(parseISO(date));
+  const sortedRecords = [...records].sort((a, b) => b.startDate.localeCompare(a.startDate));
+
+  const recordStartingToday = sortedRecords.find(r => r.startDate === date);
+  const recordEndingToday = sortedRecords.find(r => r.endDate === date);
+  const recordContainingToday = sortedRecords.find(r => {
+    const start = startOfDay(parseISO(r.startDate));
+    const end = r.endDate ? startOfDay(parseISO(r.endDate)) : null;
+    
+    if (end) {
+      return (isAfter(currentDay, start) || isSameDay(currentDay, start)) && 
+             (isBefore(currentDay, end) || isSameDay(currentDay, end));
+    } else {
+      return isAfter(currentDay, start) || isSameDay(currentDay, start);
+    }
+  });
+
+  // Calculate effective states based on staged action
+  const effStartingToday = stagedAction?.type === 'start' || (recordStartingToday && stagedAction?.type !== 'undo_start');
+  const effEndingToday = stagedAction?.type === 'end' || (recordEndingToday && stagedAction?.type !== 'undo_end');
+  const effContainingToday = stagedAction?.type === 'start' || (recordContainingToday && stagedAction?.type !== 'undo_start');
 
   const toggleItem = (list: string[], setList: (l: string[]) => void, item: string) => {
     if (list.includes(item)) {
@@ -53,6 +90,19 @@ export default function DailyLogModal({ isOpen, onClose, date, initialData, onSa
   };
 
   const handleSave = () => {
+    // Apply staged action
+    if (stagedAction) {
+      if (stagedAction.type === 'start') {
+        addRecord({ id: Date.now().toString() + Math.random().toString(36).substring(2), startDate: date, endDate: null });
+      } else if (stagedAction.type === 'end' && stagedAction.recordId) {
+        updateRecord(stagedAction.recordId, { endDate: date });
+      } else if (stagedAction.type === 'undo_start' && stagedAction.recordId) {
+        deleteRecord(stagedAction.recordId);
+      } else if (stagedAction.type === 'undo_end' && stagedAction.recordId) {
+        updateRecord(stagedAction.recordId, { endDate: null });
+      }
+    }
+
     onSave({
       date,
       symptoms,
@@ -75,6 +125,64 @@ export default function DailyLogModal({ isOpen, onClose, date, initialData, onSa
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-8">
+          {/* Period Status */}
+          <section>
+            <h4 className="text-sm font-medium text-stone-500 mb-3 tracking-wide">经期状态</h4>
+            <div className="flex flex-wrap gap-3">
+              {!effContainingToday && (
+                <button
+                  onClick={() => {
+                    if (recordStartingToday) setStagedAction(null);
+                    else setStagedAction({ type: 'start' });
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-100 transition-colors"
+                >
+                  <Droplet className="w-4 h-4" />
+                  <span className="text-sm font-medium">标记为经期开始</span>
+                </button>
+              )}
+
+              {effContainingToday && !effEndingToday && (
+                <button
+                  onClick={() => {
+                    if (recordEndingToday) setStagedAction(null);
+                    else setStagedAction({ type: 'end', recordId: recordContainingToday?.id || '' });
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-stone-100 text-stone-700 border border-stone-200 hover:bg-stone-200 transition-colors"
+                >
+                  <Check className="w-4 h-4" />
+                  <span className="text-sm font-medium">标记为经期结束</span>
+                </button>
+              )}
+
+              {effStartingToday && (
+                <button
+                  onClick={() => {
+                    if (recordStartingToday) setStagedAction({ type: 'undo_start', recordId: recordStartingToday.id });
+                    else setStagedAction(null);
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-stone-100 text-stone-500 border border-stone-200 hover:bg-stone-200 transition-colors"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  <span className="text-sm font-medium">撤销开始</span>
+                </button>
+              )}
+
+              {effEndingToday && (
+                <button
+                  onClick={() => {
+                    if (recordEndingToday) setStagedAction({ type: 'undo_end', recordId: recordEndingToday.id });
+                    else setStagedAction(null);
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-stone-100 text-stone-500 border border-stone-200 hover:bg-stone-200 transition-colors"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  <span className="text-sm font-medium">撤销结束</span>
+                </button>
+              )}
+            </div>
+          </section>
+
           {/* Symptoms */}
           <section>
             <h4 className="text-sm font-medium text-stone-500 mb-3 tracking-wide">身体症状</h4>

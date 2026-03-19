@@ -37,6 +37,10 @@ export function usePeriodStore() {
     return saved ? JSON.parse(saved) : { averageCycleLength: 28, averagePeriodLength: 5, reminderDays: 2 };
   });
 
+  const [hasBackup, setHasBackup] = useState<boolean>(() => {
+    return !!localStorage.getItem('period_backup_records');
+  });
+
   useEffect(() => {
     localStorage.setItem('period_records', JSON.stringify(records));
   }, [records]);
@@ -65,5 +69,43 @@ export function usePeriodStore() {
     setDailyLogs(prev => ({ ...prev, [log.date]: log }));
   };
 
-  return { records, dailyLogs, settings, setSettings, addRecord, updateRecord, deleteRecord, saveDailyLog };
+  const clearAllData = () => {
+    localStorage.setItem('period_backup_records', JSON.stringify(records));
+    localStorage.setItem('period_backup_daily_logs', JSON.stringify(dailyLogs));
+    localStorage.setItem('period_backup_settings', JSON.stringify(settings));
+    setHasBackup(true);
+
+    setRecords([]);
+    setDailyLogs({});
+    setSettings({ averageCycleLength: 28, averagePeriodLength: 5, reminderDays: 2 });
+  };
+
+  const restoreData = () => {
+    const backupRecords = localStorage.getItem('period_backup_records');
+    const backupLogs = localStorage.getItem('period_backup_daily_logs');
+    const backupSettings = localStorage.getItem('period_backup_settings');
+
+    if (backupRecords) setRecords(JSON.parse(backupRecords));
+    if (backupLogs) setDailyLogs(JSON.parse(backupLogs));
+    if (backupSettings) setSettings(JSON.parse(backupSettings));
+
+    localStorage.removeItem('period_backup_records');
+    localStorage.removeItem('period_backup_daily_logs');
+    localStorage.removeItem('period_backup_settings');
+    setHasBackup(false);
+  };
+
+  return { 
+    records, 
+    dailyLogs, 
+    settings, 
+    hasBackup,
+    setSettings, 
+    addRecord, 
+    updateRecord, 
+    deleteRecord, 
+    saveDailyLog,
+    clearAllData,
+    restoreData
+  };
 }

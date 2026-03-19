@@ -6,7 +6,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import DailyLogModal from './DailyLogModal';
 
 export default function Calendar() {
-  const { records, settings, dailyLogs, saveDailyLog } = usePeriodStore();
+  const { records, settings, dailyLogs, saveDailyLog, addRecord, updateRecord, deleteRecord } = usePeriodStore();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDateStr, setSelectedDateStr] = useState<string | null>(null);
 
@@ -114,6 +114,10 @@ export default function Calendar() {
           onClose={() => setSelectedDateStr(null)} 
           date={selectedDateStr}
           initialData={dailyLogs[selectedDateStr]}
+          records={records}
+          addRecord={addRecord}
+          updateRecord={updateRecord}
+          deleteRecord={deleteRecord}
           onSave={saveDailyLog}
         />
       )}

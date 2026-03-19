@@ -6,7 +6,10 @@ export function getTodayStr() {
 }
 
 export function getDynamicAverages(records: PeriodRecord[], settings: UserSettings) {
-  if (records.length < 2) return { cycle: settings.averageCycleLength, period: settings.averagePeriodLength };
+  if (records.length === 0) {
+    return { cycle: settings.averageCycleLength, period: settings.averagePeriodLength, isCalculated: false };
+  }
+  
   const sorted = [...records].sort((a, b) => b.startDate.localeCompare(a.startDate));
   let totalCycle = 0;
   let cycleCount = 0;
@@ -16,20 +19,34 @@ export function getDynamicAverages(records: PeriodRecord[], settings: UserSettin
   for (let i = 0; i < sorted.length - 1; i++) {
     const current = parseISO(sorted[i].startDate);
     const prev = parseISO(sorted[i+1].startDate);
-    totalCycle += differenceInDays(current, prev);
-    cycleCount++;
+    const diff = differenceInDays(current, prev);
+    // Filter out extreme outliers (e.g., missed logging for a month)
+    if (diff >= 15 && diff <= 60) {
+      totalCycle += diff;
+      cycleCount++;
+    }
   }
 
   for (const r of sorted) {
     if (r.endDate) {
-      totalPeriod += differenceInDays(parseISO(r.endDate), parseISO(r.startDate)) + 1;
-      periodCount++;
+      const diff = differenceInDays(parseISO(r.endDate), parseISO(r.startDate)) + 1;
+      // Filter out extreme outliers
+      if (diff >= 1 && diff <= 15) {
+        totalPeriod += diff;
+        periodCount++;
+      }
     }
   }
 
+  const cycle = cycleCount > 0 ? Math.round(totalCycle / cycleCount) : settings.averageCycleLength;
+  const period = periodCount > 0 ? Math.round(totalPeriod / periodCount) : settings.averagePeriodLength;
+
   return {
-    cycle: cycleCount > 0 ? Math.round(totalCycle / cycleCount) : settings.averageCycleLength,
-    period: periodCount > 0 ? Math.round(totalPeriod / periodCount) : settings.averagePeriodLength
+    cycle,
+    period,
+    isCalculated: cycleCount > 0 || periodCount > 0,
+    cycleCount,
+    periodCount
   };
 }
 

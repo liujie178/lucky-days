@@ -1,22 +1,13 @@
 import { usePeriodStore } from '../store';
 import { differenceInDays, parseISO, format } from 'date-fns';
 import { Activity, CalendarDays } from 'lucide-react';
+import { getDynamicAverages } from '../utils/periodLogic';
 
 export default function Stats() {
   const { records, settings } = usePeriodStore();
+  const averages = getDynamicAverages(records, settings);
 
   const sortedRecords = [...records].sort((a, b) => b.startDate.localeCompare(a.startDate));
-
-  const cycleLengths = [];
-  for (let i = 0; i < sortedRecords.length - 1; i++) {
-    const current = parseISO(sortedRecords[i].startDate);
-    const previous = parseISO(sortedRecords[i + 1].startDate);
-    cycleLengths.push(differenceInDays(current, previous));
-  }
-
-  const avgCycle = cycleLengths.length > 0 
-    ? Math.round(cycleLengths.reduce((a, b) => a + b, 0) / cycleLengths.length)
-    : settings.averageCycleLength;
 
   return (
     <div className="px-4 py-8 max-w-md mx-auto space-y-8">
@@ -26,7 +17,7 @@ export default function Stats() {
         <div className="bg-white p-6 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] flex flex-col items-center justify-center text-center">
           <Activity className="w-6 h-6 text-rose-400 mb-3" />
           <div className="text-3xl font-light text-stone-800 mb-1">
-            {avgCycle} <span className="text-sm text-stone-500 font-normal">天</span>
+            {averages.cycle} <span className="text-sm text-stone-500 font-normal">天</span>
           </div>
           <div className="text-xs text-stone-400 font-medium tracking-wide uppercase">平均周期</div>
         </div>
@@ -34,7 +25,7 @@ export default function Stats() {
         <div className="bg-white p-6 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] flex flex-col items-center justify-center text-center">
           <CalendarDays className="w-6 h-6 text-rose-400 mb-3" />
           <div className="text-3xl font-light text-stone-800 mb-1">
-            {settings.averagePeriodLength} <span className="text-sm text-stone-500 font-normal">天</span>
+            {averages.period} <span className="text-sm text-stone-500 font-normal">天</span>
           </div>
           <div className="text-xs text-stone-400 font-medium tracking-wide uppercase">平均经期</div>
         </div>
